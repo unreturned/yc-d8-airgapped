@@ -1,0 +1,66 @@
+# Copy to terraform.tfvars and edit. Run: cp terraform.tfvars.example terraform.tfvars
+
+# --- General ---
+# prefix = "myproject"   # Default: from $USER (eval $(make export-prefix) to set TF_VAR_prefix)
+# zone = "ru-central1-a"
+# ssh_public_key_path = ".ssh/id_ed25519.pub"   # Created on first make init
+# ssh_username = "ubuntu"
+# wildcard_dns_service = "sslip.io"   # or nip.io (same: 51-250-67-132.sslip.io → IP)
+
+# --- Network ---
+# vpc_cidr = "10.10.10.0/24"
+
+# --- Proxy (Tinyproxy on bastion) ---
+# proxy_port = 8888
+# proxy_wait_timeout = 600
+# proxy_wait_interval = 10
+
+# --- Bastion ---
+# bastion = {
+#   cores         = 2
+#   memory        = 2
+#   disk_size     = 20
+#   core_fraction = 20    # optional, default 20 (20, 50, 100)
+#   preemptible   = true  # optional, default true
+# }
+
+# --- Registry (Harbor + NFS) ---
+# registry = {
+#   cores                = 2
+#   memory               = 4
+#   disk_size            = 100
+#   data_disk_size       = 100       # optional, default 100; null = NFS on root disk
+#   data_disk_mountpoint = "/data"  # optional, default /data
+#   core_fraction        = 20        # optional, default 20
+#   preemptible          = true     # optional, default true
+# }
+
+# --- Master ---
+# master = {
+#   cores                = 8
+#   memory               = 16
+#   root_disk_size       = 50
+#   data_disk_size       = 10        # optional, default 10; null = etcd on root disk
+#   data_disk_mountpoint = "/var/lib/etcd"  # optional, default /var/lib/etcd
+#   core_fraction        = 100       # optional, default 100
+#   preemptible          = true     # optional, default true
+# }
+
+# --- Compute ---
+# platform_id = "standard-v3"
+# disk_type = "network-ssd"
+# OS image: make get-image-id [FAMILY=...]
+#   make get-image-id                     # default Ubuntu 24.04 LTS OS Login
+#   make get-image-id FAMILY=debian-13
+# image_id = "fd84mnbiarffhtfrhnog"
+
+# --- Harbor ---
+# harbor_version = "2.14.0"
+# harbor_admin_password = "Harbor12345"
+
+# --- Deckhouse ---
+# deckhouse_registry_host = "registry.deckhouse.ru"
+# deckhouse_repo_path = "deckhouse"
+# deckhouse_edition = "ce"
+# deckhouse_release_channel = "alpha"   # alpha = latest; stable, rock-solid, lts for production
+# deckhouse_registry_docker_cfg = ""    # empty = anonymous pull; for login: make dockercfg REGISTRY=... USER=... PASSWORD=...

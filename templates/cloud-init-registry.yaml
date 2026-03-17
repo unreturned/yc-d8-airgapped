@@ -1,0 +1,174 @@
+#cloud-config
+package_update: false
+package_upgrade: false
+
+timezone: Europe/Moscow
+
+users:
+  - name: ${username}
+    groups: sudo
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/profile.d/proxy.sh
+    permissions: '0644'
+    content: |
+      export http_proxy=${proxy_url}
+      export https_proxy=${proxy_url}
+      export HTTP_PROXY=${proxy_url}
+      export HTTPS_PROXY=${proxy_url}
+      export no_proxy=${no_proxy}
+      export NO_PROXY=${no_proxy}
+
+  - path: /etc/apt/apt.conf.d/95proxies
+    permissions: '0644'
+    content: |
+      Acquire::http::Proxy "${proxy_url}";
+      Acquire::https::Proxy "${proxy_url}";
+
+  - path: /etc/apt/apt.conf.d/99timeout
+    permissions: '0644'
+    content: |
+      Acquire::http::Timeout "120";
+
+  - path: /etc/systemd/system/docker.service.d/http-proxy.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      Environment="HTTP_PROXY=${proxy_url}"
+      Environment="HTTPS_PROXY=${proxy_url}"
+      Environment="NO_PROXY=${no_proxy}"
+
+  - path: /usr/local/bin/wait-for-proxy.sh
+    permissions: '0755'
+    encoding: b64
+    content: ${base64encode(wait_for_proxy_script)}
+
+  - path: /usr/local/bin/install-harbor.sh
+    permissions: '0755'
+    encoding: b64
+    content: ${base64encode(harbor_install_script)}
+
+  - path: /root/config.yml
+    permissions: '0600'
+    encoding: b64
+    content: ${base64encode(deckhouse_config)}
+
+  - path: /usr/local/bin/install-deckhouse.sh
+    permissions: '0755'
+    encoding: b64
+    content: ${base64encode(install_deckhouse_script)}
+
+  - path: /root/.ssh/id_ed25519
+    permissions: '0600'
+    encoding: b64
+    content: ${base64encode(ssh_private_key)}
+
+bootcmd:
+  - systemctl daemon-reload
+
+runcmd:
+  - /usr/local/bin/wait-for-proxy.sh
+  - export http_proxy=${proxy_url}
+  - export https_proxy=${proxy_url}
+  - export DEBIAN_FRONTEND=noninteractive
+  # Wait for unattended-upgrades to finish
+  - |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for dpkg lock to be released..."
+      sleep 5
+    done
+  - apt-get update -y
+  - apt-get upgrade -y
+  - apt-get install -y -o Dpkg::Options::="--force-confnew" docker-compose-v2 chrony jq cowsay
+  - /usr/games/cowsay 'Have a nice day, dude!'
+  # Add user to docker group
+  - usermod -aG docker ${username}
+  # Configure Chrony NTP client AFTER package installation
+  - |
+    cat > /etc/chrony/chrony.conf << 'EOF'
+    # Use bastion as NTP server
+    server ${ntp_server} iburst
+    local stratum 10
+    driftfile /var/lib/chrony/chrony.drift
+    rtcsync
+    makestep 1 3
+    leapsectz right/UTC
+    logdir /var/log/chrony
+    EOF
+  - systemctl enable chrony
+  - systemctl restart chrony
+  - sleep 5
+  - chronyc sources
+  # Install Harbor
+  - nohup /usr/local/bin/install-harbor.sh > /var/log/harbor-install.log 2>&1 &
+  # Wait for Harbor certificate to be created and add it to trusted CAs
+  - |
+    echo "Waiting for Harbor certificate..."
+    for i in $(seq 1 60); do
+      if [ -f /opt/harbor/certs/harbor.crt ]; then
+        echo "Harbor certificate found, adding to trusted CAs..."
+        ln -sf /opt/harbor/certs/harbor.crt /usr/local/share/ca-certificates/registry-harbor-ca.crt
+        update-ca-certificates
+        echo "Harbor certificate added to trusted CAs"
+        break
+      fi
+      echo "Waiting for Harbor certificate... ($i/60), retrying in 10 seconds..."
+      sleep 10
+    done
+  # Configure Docker login after Harbor is ready
+  - |
+    echo "Configuring Docker login for Harbor..."
+    SSLIP_DOMAIN=$(echo "${bastion_public_ip}" | tr '.' '-')
+    # Wait for Harbor to be fully ready
+    for i in $(seq 1 30); do
+      if curl -k -s https://${registry_fqdn}/api/v2.0/health >/dev/null 2>&1; then
+        echo "Harbor is ready"
+        break
+      fi
+      echo "Waiting for Harbor to be ready... ($i/30), retrying in 10 seconds..."
+      sleep 10
+    done
+    # Login for ubuntu user
+    echo "${harbor_admin_password}" | sudo -u ${username} docker login harbor.$SSLIP_DOMAIN.sslip.io -u admin --password-stdin
+    echo "${harbor_admin_password}" | sudo -u ${username} docker login ${registry_fqdn} -u admin --password-stdin
+    # Login for root user
+    echo "${harbor_admin_password}" | docker login harbor.$SSLIP_DOMAIN.sslip.io -u admin --password-stdin
+    echo "${harbor_admin_password}" | docker login ${registry_fqdn} -u admin --password-stdin
+    echo "Docker login configured successfully"
+  # Install deckhouse-cli
+  - sh -c "$(curl -fsSL https://raw.githubusercontent.com/deckhouse/deckhouse-cli/main/tools/install.sh)"
+  - d8 completion bash > /etc/bash_completion.d/d8
+  # Install crane (container registry tool)
+  - |
+    VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
+    curl -sL "https://github.com/google/go-containerregistry/releases/download/$${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" | tar -xz -C /usr/local/bin crane
+    chmod +x /usr/local/bin/crane
+    crane completion bash > /etc/bash_completion.d/crane
+    echo "Installed crane version: $(crane version)"
+%{if has_data_disk~}
+  # Format and mount additional data disk
+  - mkfs.ext4 -F /dev/disk/by-id/virtio-data
+  - mkdir -p ${data_disk_mountpoint}
+  - mount /dev/disk/by-id/virtio-data ${data_disk_mountpoint}
+  - echo '/dev/disk/by-id/virtio-data ${data_disk_mountpoint} ext4 defaults 0 2' >> /etc/fstab
+%{else~}
+  # Create NFS directory on root disk
+  - mkdir -p ${data_disk_mountpoint}
+%{endif~}
+  # Install and configure NFS server
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-kernel-server
+  - chown -R nobody:nogroup ${data_disk_mountpoint}
+  - chmod 777 ${data_disk_mountpoint}
+  - echo "${data_disk_mountpoint} ${nfs_subnet_cidr}(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+  - exportfs -a
+  - systemctl restart nfs-kernel-server
+  - systemctl enable nfs-kernel-server
+  - echo "NFS server configured successfully on ${data_disk_mountpoint}"
+  # Start Deckhouse installation in background
+  - echo "[$(date)] Starting Deckhouse installation from registry host..."
+  - nohup /usr/local/bin/install-deckhouse.sh > /var/log/deckhouse-bootstrap.log 2>&1 &
+  - 'echo "[$(date)] Deckhouse bootstrap started. Monitor with: tail -f /var/log/deckhouse-bootstrap.log"'

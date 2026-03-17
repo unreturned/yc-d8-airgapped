@@ -1,0 +1,111 @@
+#cloud-config
+package_update: false
+package_upgrade: false
+
+timezone: Europe/Moscow
+
+users:
+  - name: ${username}
+    groups: sudo
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/profile.d/proxy.sh
+    permissions: '0644'
+    content: |
+      export http_proxy=${proxy_url}
+      export https_proxy=${proxy_url}
+      export HTTP_PROXY=${proxy_url}
+      export HTTPS_PROXY=${proxy_url}
+      export no_proxy=${no_proxy}
+      export NO_PROXY=${no_proxy}
+
+  - path: /etc/apt/apt.conf.d/95proxies
+    permissions: '0644'
+    content: |
+      Acquire::http::Proxy "${proxy_url}";
+      Acquire::https::Proxy "${proxy_url}";
+
+  - path: /etc/apt/apt.conf.d/99timeout
+    permissions: '0644'
+    content: |
+      Acquire::http::Timeout "120";
+
+  - path: /etc/systemd/system/docker.service.d/http-proxy.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      Environment="HTTP_PROXY=${proxy_url}"
+      Environment="HTTPS_PROXY=${proxy_url}"
+      Environment="NO_PROXY=${no_proxy}"
+
+  - path: /usr/local/bin/wait-for-proxy.sh
+    permissions: '0755'
+    encoding: b64
+    content: ${base64encode(wait_for_proxy_script)}
+
+  - path: /usr/local/bin/copy-harbor-cert.sh
+    permissions: '0755'
+    encoding: b64
+    content: ${base64encode(copy_harbor_cert_script)}
+
+bootcmd:
+  - systemctl daemon-reload
+
+runcmd:
+  - /usr/local/bin/wait-for-proxy.sh
+  - export http_proxy=${proxy_url}
+  - export https_proxy=${proxy_url}
+  - export DEBIAN_FRONTEND=noninteractive
+  # Wait for unattended-upgrades to finish
+  - |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for dpkg lock to be released..."
+      sleep 5
+    done
+  - apt-get update -y
+  - apt-get upgrade -y
+  - apt-get install -y -o Dpkg::Options::="--force-confnew" chrony
+  # Configure Chrony NTP client AFTER package installation
+  - |
+    cat > /etc/chrony/chrony.conf << 'EOF'
+    # Use bastion as NTP server
+    server ${ntp_server} iburst
+
+    # Fallback to local time if NTP server is unavailable
+    local stratum 10
+
+    # Record the rate at which the system clock gains/losses time
+    driftfile /var/lib/chrony/chrony.drift
+
+    # Enable kernel synchronization of the real-time clock (RTC)
+    rtcsync
+
+    # Step the system clock instead of slewing it if the adjustment is larger than 1 second
+    makestep 1 3
+
+    # Get TAI-UTC offset and leap seconds from the system tz database
+    leapsectz right/UTC
+
+    # Log files
+    logdir /var/log/chrony
+    EOF
+  - systemctl enable chrony
+  - systemctl restart chrony
+  - sleep 5
+  - chronyc sources
+%{if has_data_disk~}
+  # Format and mount additional data disk
+  - mkfs.ext4 -F /dev/disk/by-id/virtio-data
+  - mkdir -p ${data_disk_mountpoint}
+  - mount /dev/disk/by-id/virtio-data ${data_disk_mountpoint}
+  - echo '/dev/disk/by-id/virtio-data ${data_disk_mountpoint} ext4 defaults 0 2' >> /etc/fstab
+  - chown -R root:root ${data_disk_mountpoint}
+%{else~}
+  - echo "No additional data disk configured"
+%{endif~}
+  # Copy Harbor certificate and add to trusted CAs
+  - nohup /usr/local/bin/copy-harbor-cert.sh > /var/log/copy-harbor-cert.log 2>&1 &

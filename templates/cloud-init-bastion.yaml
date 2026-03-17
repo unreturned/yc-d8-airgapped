@@ -1,0 +1,233 @@
+#cloud-config
+package_update: true
+
+timezone: Europe/Moscow
+
+users:
+  - name: ${username}
+    groups: sudo
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /tmp/chrony.conf.custom
+    permissions: '0644'
+    content: |
+      # Use public NTP servers
+      pool pool.ntp.org iburst
+      # Allow NTP client access from local network
+      allow ${vpc_cidr}
+      # Serve time even if not synchronized to a time source
+      local stratum 10
+      # Record the rate at which the system clock gains/losses time
+      driftfile /var/lib/chrony/chrony.drift
+      # Enable kernel synchronization of the real-time clock (RTC)
+      rtcsync
+      # Step the system clock instead of slewing it if the adjustment is larger than 1 second
+      makestep 1 3
+      # Get TAI-UTC offset and leap seconds from the system tz database
+      leapsectz right/UTC
+      # Log files
+      logdir /var/log/chrony
+
+  - path: /etc/nginx/sites-available/deckhouse-proxy
+    permissions: '0644'
+    content: |
+      # Reverse Proxy for Deckhouse and Harbor via wildcard DNS (${wildcard_dns_service})
+      # Deckhouse is configured to use wildcard DNS domains (publicDomainTemplate)
+
+      server {
+          listen 80;
+          server_name ~^.+\.(sslip|nip)\.io$;
+
+          # Allow certbot HTTP-01 challenge
+          location /.well-known/acme-challenge/ {
+              root /var/www/html;
+          }
+
+          # Redirect all other HTTP to HTTPS
+          location / {
+              return 301 https://$host$request_uri;
+          }
+      }
+
+      # Harbor proxy
+      server {
+          listen 443 ssl http2;
+          server_name ~^harbor\.[\d\-]+\.(sslip|nip)\.io$;
+
+          # SSL certificate path
+          ssl_certificate __SSL_CERT_PATH__;
+          ssl_certificate_key __SSL_KEY_PATH__;
+
+          # Disable SSL verification for upstream (self-signed cert on Harbor)
+          proxy_ssl_verify off;
+          proxy_ssl_server_name on;
+
+          # Dynamic DNS resolution for registry
+          resolver 127.0.0.53 valid=10s;
+          resolver_timeout 5s;
+
+          # Proxy to Harbor registry
+          location / {
+              # Use variable to force dynamic DNS resolution
+              set $registry_backend "${registry_hostname}";
+              proxy_pass https://$registry_backend:443;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $host;
+
+              # WebSocket support for Harbor
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+
+              # Timeouts
+              proxy_connect_timeout 60s;
+              proxy_send_timeout 60s;
+              proxy_read_timeout 60s;
+
+              # Required for Harbor large image pushes
+              client_max_body_size 0;
+          }
+      }
+
+      # Deckhouse proxy
+      server {
+          listen 443 ssl http2;
+          server_name ~^.+\.(sslip|nip)\.io$;
+
+          # SSL certificate path
+          ssl_certificate __SSL_CERT_PATH__;
+          ssl_certificate_key __SSL_KEY_PATH__;
+
+          # Disable SSL verification for upstream (self-signed certs on master)
+          proxy_ssl_verify off;
+          proxy_ssl_server_name on;
+
+          # Dynamic DNS resolution for master
+          resolver 127.0.0.53 valid=10s;
+          resolver_timeout 5s;
+
+          # Proxy to master node Ingress
+          location / {
+              # Use variable to force dynamic DNS resolution
+              set $master_backend "${master_hostname}";
+
+              proxy_pass https://$master_backend:443;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $host;
+
+              # WebSocket support
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+
+              # Timeouts
+              proxy_connect_timeout 60s;
+              proxy_send_timeout 60s;
+              proxy_read_timeout 60s;
+          }
+      }
+
+  - path: /usr/local/bin/setup-ssl-cert.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Obtain Let's Encrypt certificate for wildcard DNS domains (${wildcard_dns_service})
+      set -euo pipefail
+
+      echo "[$(date)] Starting Let's Encrypt certificate setup..."
+
+      # Get public IP from metadata
+      PUBLIC_IP=$(curl -s -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)
+      DOMAIN_IP=$(echo $PUBLIC_IP | tr '.' '-')
+      FIRST_DOMAIN="$DOMAIN_IP.${wildcard_dns_service}"
+
+      echo "[$(date)] Public IP: $PUBLIC_IP"
+      echo "[$(date)] Wildcard DNS domain: $FIRST_DOMAIN"
+
+      # Obtain certificate for all Deckhouse and Harbor domains
+      echo "[$(date)] Requesting Let's Encrypt certificate..."
+      certbot certonly --webroot -w /var/www/html --non-interactive --agree-tos \
+        --register-unsafely-without-email --no-eff-email \
+        -d $FIRST_DOMAIN \
+        -d api.$FIRST_DOMAIN \
+        -d argocd.$FIRST_DOMAIN \
+        -d commander.$FIRST_DOMAIN \
+        -d console.$FIRST_DOMAIN \
+        -d dashboard.$FIRST_DOMAIN \
+        -d dex.$FIRST_DOMAIN \
+        -d documentation.$FIRST_DOMAIN \
+        -d grafana.$FIRST_DOMAIN \
+        -d harbor.$FIRST_DOMAIN \
+        -d hubble.$FIRST_DOMAIN \
+        -d istio.$FIRST_DOMAIN \
+        -d kubeconfig.$FIRST_DOMAIN \
+        -d neuvector.$FIRST_DOMAIN \
+        -d payload-registry.$FIRST_DOMAIN \
+        -d prometheus.$FIRST_DOMAIN \
+        -d status.$FIRST_DOMAIN \
+        -d stronghold.$FIRST_DOMAIN \
+        -d tools.$FIRST_DOMAIN \
+        -d upmeter.$FIRST_DOMAIN
+
+      echo "[$(date)] Certificate obtained successfully"
+
+      # Update nginx config to use Let's Encrypt certificate
+      echo "[$(date)] Updating nginx configuration..."
+      sed -i "s|/etc/ssl/certs/selfsigned.crt|/etc/letsencrypt/live/$FIRST_DOMAIN/fullchain.pem|g" /etc/nginx/sites-available/deckhouse-proxy
+      sed -i "s|/etc/ssl/private/selfsigned.key|/etc/letsencrypt/live/$FIRST_DOMAIN/privkey.pem|g" /etc/nginx/sites-available/deckhouse-proxy
+
+      # Test and reload nginx
+      echo "[$(date)] Testing nginx configuration..."
+      nginx -t
+
+      echo "[$(date)] Reloading nginx..."
+      nginx -s reload
+
+      echo "[$(date)] SUCCESS: Let's Encrypt certificate installed"
+      echo "[$(date)] Certificate path: /etc/letsencrypt/live/$FIRST_DOMAIN/"
+      echo "[$(date)] Access URL: https://console.$FIRST_DOMAIN"
+
+runcmd:
+  # Wait for unattended-upgrades to complete
+  - |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "Waiting for dpkg lock to be released..."
+      sleep 5
+    done
+  # Install required packages (non-interactive)
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" tinyproxy chrony nginx certbot
+  # Configure Tinyproxy
+  - sed -i 's/^#Allow/Allow/g' /etc/tinyproxy/tinyproxy.conf
+  - sed -i 's/^Port 8888/Port ${proxy_port}/g' /etc/tinyproxy/tinyproxy.conf
+  - systemctl enable tinyproxy
+  - systemctl restart tinyproxy
+  # Configure and start Chrony NTP server
+  - cp /tmp/chrony.conf.custom /etc/chrony/chrony.conf
+  - systemctl enable chrony
+  - systemctl restart chrony
+  # Wait a bit for time sync
+  - sleep 5
+  - chronyc sources -v
+  # Configure Nginx reverse proxy with temporary self-signed cert
+  - mkdir -p /var/www/html/.well-known/acme-challenge
+  - mkdir -p /etc/ssl/private
+  # Generate temporary self-signed certificate
+  - openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout /etc/ssl/private/selfsigned.key -out /etc/ssl/certs/selfsigned.crt -subj "/CN=placeholder"
+  # Configure nginx with self-signed cert initially
+  - sed -i "s|__SSL_CERT_PATH__|/etc/ssl/certs/selfsigned.crt|g" /etc/nginx/sites-available/deckhouse-proxy
+  - sed -i "s|__SSL_KEY_PATH__|/etc/ssl/private/selfsigned.key|g" /etc/nginx/sites-available/deckhouse-proxy
+  - ln -sf /etc/nginx/sites-available/deckhouse-proxy /etc/nginx/sites-enabled/
+  - rm -f /etc/nginx/sites-enabled/default
+  - nginx -t && systemctl enable nginx && systemctl restart nginx
+  # Obtain Let's Encrypt certificate
+  - /usr/local/bin/setup-ssl-cert.sh
