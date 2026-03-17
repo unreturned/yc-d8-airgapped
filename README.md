@@ -165,7 +165,7 @@ Default configuration uses **preemptible VMs** and reduced guaranteed vCPU share
 | **Registry** | 2c, 4GB, 100GB SSD | 20% | yes |
 | **Master** | 8c, 16GB, 60GB SSD + 100GB HDD | 100% | yes |
 
-**Approximate cost:** ~₽8.60/hr | ~₽6,250/mo | ~₽75,000/yr
+**Approximate cost:** ~₽8.60/hr
 
 **Pricing:** https://yandex.cloud/en/prices
 
