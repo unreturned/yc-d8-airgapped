@@ -220,24 +220,7 @@ urls: ## Show Deckhouse UI and Harbor access URLs (via sslip.io with Let's Encry
 	printf "[INFO] sslip.io domain: $$SSLIP_IP.sslip.io\n"; \
 	echo ""; \
 	printf "[INFO] Deckhouse URLs (with valid SSL after Deckhouse installation):\n"; \
-	echo "  API:             https://api.$$SSLIP_IP.sslip.io"; \
-	echo "  ArgoCD:          https://argocd.$$SSLIP_IP.sslip.io"; \
-	echo "  Commander:       https://commander.$$SSLIP_IP.sslip.io"; \
 	echo "  Console:         https://console.$$SSLIP_IP.sslip.io"; \
-	echo "  Dashboard:       https://dashboard.$$SSLIP_IP.sslip.io"; \
-	echo "  Dex (Auth):      https://dex.$$SSLIP_IP.sslip.io"; \
-	echo "  Documentation:   https://documentation.$$SSLIP_IP.sslip.io"; \
-	echo "  Grafana:         https://grafana.$$SSLIP_IP.sslip.io"; \
-	echo "  Hubble:          https://hubble.$$SSLIP_IP.sslip.io"; \
-	echo "  Istio:           https://istio.$$SSLIP_IP.sslip.io"; \
-	echo "  Kubeconfig:      https://kubeconfig.$$SSLIP_IP.sslip.io"; \
-	echo "  NeuVector:       https://neuvector.$$SSLIP_IP.sslip.io"; \
-	echo "  Payload Registry: https://payload-registry.$$SSLIP_IP.sslip.io"; \
-	echo "  Prometheus:      https://prometheus.$$SSLIP_IP.sslip.io"; \
-	echo "  Status:          https://status.$$SSLIP_IP.sslip.io"; \
-	echo "  Stronghold:      https://stronghold.$$SSLIP_IP.sslip.io"; \
-	echo "  Tools:           https://tools.$$SSLIP_IP.sslip.io"; \
-	echo "  Upmeter:         https://upmeter.$$SSLIP_IP.sslip.io"; \
 	echo ""; \
 	printf "[INFO] Deckhouse Login credentials:\n"; \
 	echo "  Email:    admin@deckhouse.io"; \
