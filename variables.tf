@@ -119,7 +119,7 @@ variable "registry" {
 variable "harbor_version" {
   description = "Harbor version to install"
   type        = string
-  default     = "2.14.0"
+  default     = "2.15.0"
 }
 
 # Deckhouse
@@ -209,7 +209,7 @@ variable "disk_type" {
 }
 
 variable "image_id" {
-  description = "OS image ID for VMs (use 'make get-image-id' to find latest). Examples: ubuntu-2404-lts, debian-11, astra-linux-se-1-7"
+  description = "OS image ID for VMs (use 'make get-image-id' to find latest)"
   type        = string
-  default     = "fd84mnbiarffhtfrhnog" # Ubuntu 24.04 LTS OS Login
+  default     = "fd80on0ma1ic60hees6n" # Ubuntu 24.04 LTS OS Login
 }

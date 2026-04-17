@@ -51,11 +51,11 @@
 # disk_type = "network-ssd"
 # OS image: make get-image-id [FAMILY=...]
 #   make get-image-id                     # default Ubuntu 24.04 LTS OS Login
-#   make get-image-id FAMILY=debian-13
-# image_id = "fd84mnbiarffhtfrhnog"
+#   make get-image-id FAMILY=debian-12
+# image_id = "fd80on0ma1ic60hees6n"
 
 # --- Harbor ---
-# harbor_version = "2.14.0"
+# harbor_version = "2.15.0"
 # harbor_admin_password = "Harbor12345"
 
 # --- Deckhouse ---

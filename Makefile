@@ -390,7 +390,7 @@ output-network: ## Show network information
 
 # --- Yandex Cloud ---
 
-get-image-id: ## Get ID of latest OS image (default: ubuntu-2404-lts-oslogin, or FAMILY=ubuntu-2404-lts/debian-12/astralinux-alse-base-18)
+get-image-id: ## Get ID of latest OS image (default: ubuntu-2404-lts-oslogin, or FAMILY=ubuntu-2404-lts-oslogin/ubuntu-2404-lts/debian-12)
 	@FAMILY=$${FAMILY:-ubuntu-2404-lts-oslogin}; \
 	printf "[INFO] Getting ID of latest $$FAMILY image...\n"; \
 	IMAGE_ID=$$(yc compute image list --folder-id standard-images --format json | jq -r "[.[] | select(.family == \"$$FAMILY\")] | sort_by(.created_at)[-1].id"); \

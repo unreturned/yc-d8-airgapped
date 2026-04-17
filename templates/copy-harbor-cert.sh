@@ -6,7 +6,7 @@ set -euo pipefail
 
 # shellcheck disable=SC2154
 REGISTRY_HOST="${registry_fqdn}"
-MAX_ATTEMPTS=60
+MAX_ATTEMPTS=120
 
 echo "Waiting for Harbor certificate from $REGISTRY_HOST..."
 
