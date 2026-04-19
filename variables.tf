@@ -150,7 +150,7 @@ variable "deckhouse_edition" {
 variable "deckhouse_release_channel" {
   description = "Deckhouse release channel (alpha, beta, early-access, stable, rock-solid, lts)"
   type        = string
-  default     = "alpha"
+  default     = "stable"
 
   validation {
     condition     = contains(["alpha", "beta", "early-access", "stable", "rock-solid", "lts"], var.deckhouse_release_channel)
