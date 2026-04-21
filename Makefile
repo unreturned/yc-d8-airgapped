@@ -227,15 +227,22 @@ urls: ## Show Deckhouse UI and Harbor access URLs (via sslip.io with Let's Encry
 	echo "  Password: 7md03yxgzt"; \
 	echo ""; \
 	printf "[INFO] Harbor Registry:\n"; \
-	echo "  URL:      https://harbor.$$SSLIP_IP.sslip.io"; \
-	echo "  Login:    admin"; \
-	echo "  Password: Harbor12345"; \
+	HARBOR=$$(tofu output -json harbor_web); \
+	echo "  URL:      $$(echo "$$HARBOR" | jq -r .url)"; \
+	echo "  Login:    $$(echo "$$HARBOR" | jq -r .username)"; \
+	echo "  Password: $$(echo "$$HARBOR" | jq -r .password)"; \
+	echo ""; \
+	printf "[INFO] Deckhouse GUI installer:\n"; \
+	INST=$$(tofu output -json installer_gui); \
+	echo "  URL:      $$(echo "$$INST" | jq -r .url)"; \
+	echo "  Login:    $$(echo "$$INST" | jq -r .username)"; \
+	echo "  Password: $$(echo "$$INST" | jq -r .password)"; \
 	echo ""
 
 # --- Deckhouse ---
 
-dockercfg: ## Generate base64-encoded dockerconfigjson for Harbor registry (optional: REGISTRY=... USER=... PASSWORD=...)
-	@printf "[INFO] Generating dockerconfigjson for Harbor registry...\n"
+dockercfg: ## Generate base64-encoded dockerconfigjson for registry (optional: REGISTRY=... USER=... PASSWORD=...)
+	@printf "[INFO] Generating dockerconfigjson for registry...\n"
 	@if [ -n "$(REGISTRY)" ] && [ -n "$(USER)" ] && [ -n "$(PASSWORD)" ]; then \
 		REGISTRY_FQDN="$(REGISTRY)"; \
 		REGISTRY_USER="$(USER)"; \

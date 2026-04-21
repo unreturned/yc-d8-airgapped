@@ -43,13 +43,14 @@ resource "yandex_compute_instance" "bastion" {
 
   metadata = {
     user-data = templatefile(var.cloud_init_template_path, {
-      username             = var.ssh_username
-      ssh_public_key       = var.ssh_public_key
-      proxy_port           = var.proxy_port
-      vpc_cidr             = var.vpc_cidr
-      master_hostname      = var.master_hostname
-      registry_hostname    = var.registry_hostname
-      wildcard_dns_service = var.wildcard_dns_service
+      username                 = var.ssh_username
+      ssh_public_key           = var.ssh_public_key
+      proxy_port               = var.proxy_port
+      vpc_cidr                 = var.vpc_cidr
+      master_hostname          = var.master_hostname
+      registry_hostname        = var.registry_hostname
+      wildcard_dns_service     = var.wildcard_dns_service
+      installer_nginx_password = var.installer_nginx_password
     })
   }
 }

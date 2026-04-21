@@ -64,3 +64,6 @@
 # deckhouse_edition = "ce"
 # deckhouse_release_channel = "stable"   # alpha, beta, early-access, stable, rock-solid, lts
 # deckhouse_registry_docker_cfg = ""    # empty = anonymous pull; for login: make dockercfg REGISTRY=... USER=... PASSWORD=...
+
+# --- Deckhouse Installer ---
+# installer_nginx_password = "Installer12345"   # Basic Auth for https://installer.<ip>.* (user: installer)

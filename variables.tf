@@ -158,6 +158,13 @@ variable "deckhouse_release_channel" {
   }
 }
 
+variable "installer_nginx_password" {
+  description = "HTTP Basic Auth password for GUI Installer"
+  type        = string
+  default     = "Installer12345"
+  sensitive   = false
+}
+
 variable "harbor_admin_password" {
   description = "Harbor admin password"
   type        = string

@@ -45,11 +45,12 @@ module "bastion" {
   ssh_username             = local.ssh_config.username
   proxy_port               = var.proxy_port
   vpc_cidr                 = var.vpc_cidr
-  master_hostname          = "${local.name_prefix}-master.ru-central1.internal"
-  registry_hostname        = "${local.name_prefix}-registry.ru-central1.internal"
+  master_hostname          = "${local.name_prefix}-master.${local.region}.internal"
+  registry_hostname        = "${local.name_prefix}-registry.${local.region}.internal"
   wildcard_dns_service     = var.wildcard_dns_service
   cloud_init_template_path = "${path.module}/templates/cloud-init-bastion.yaml"
   security_group_ids       = [module.network.bastion_security_group_id]
+  installer_nginx_password = var.installer_nginx_password
 }
 
 # Registry host

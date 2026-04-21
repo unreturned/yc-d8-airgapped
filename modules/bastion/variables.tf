@@ -100,3 +100,8 @@ variable "wildcard_dns_service" {
   type        = string
   default     = "sslip.io"
 }
+
+variable "installer_nginx_password" {
+  description = "HTTP Basic Auth password for installer.* on nginx (user: installer)"
+  type        = string
+}

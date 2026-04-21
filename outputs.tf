@@ -19,6 +19,26 @@ output "console" {
   sensitive = true
 }
 
+output "installer_gui" {
+  description = "Deckhouse GUI installer (nginx Basic Auth)"
+  value = {
+    url      = "https://installer.${replace(module.bastion.public_ip, ".", "-")}.${var.wildcard_dns_service}"
+    username = "installer"
+    password = var.installer_nginx_password
+  }
+  sensitive = false
+}
+
+output "harbor_web" {
+  description = "Harbor UI"
+  value = {
+    url      = "https://harbor.${replace(module.bastion.public_ip, ".", "-")}.${var.wildcard_dns_service}"
+    username = "admin"
+    password = var.harbor_admin_password
+  }
+  sensitive = false
+}
+
 # Outputs for Makefile
 
 output "bastion" {

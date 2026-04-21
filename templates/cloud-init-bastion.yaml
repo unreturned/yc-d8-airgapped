@@ -96,6 +96,39 @@ write_files:
           }
       }
 
+      # Deckhouse GUI installer
+      server {
+          listen 443 ssl http2;
+          server_name ~^installer\.[\d\-]+\.(sslip|nip)\.io$;
+
+          ssl_certificate __SSL_CERT_PATH__;
+          ssl_certificate_key __SSL_KEY_PATH__;
+
+          resolver 127.0.0.53 valid=10s;
+          resolver_timeout 5s;
+
+          auth_basic "Deckhouse Installer";
+          auth_basic_user_file /etc/nginx/.installer-htpasswd;
+
+          location / {
+              set $registry_backend "${registry_hostname}";
+              proxy_pass http://$registry_backend:8080;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $host;
+
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+
+              proxy_connect_timeout 60s;
+              proxy_send_timeout 3600s;
+              proxy_read_timeout 3600s;
+          }
+      }
+
       # Deckhouse proxy
       server {
           listen 443 ssl http2;
@@ -169,6 +202,7 @@ write_files:
         -d grafana.$FIRST_DOMAIN \
         -d harbor.$FIRST_DOMAIN \
         -d hubble.$FIRST_DOMAIN \
+        -d installer.$FIRST_DOMAIN \
         -d istio.$FIRST_DOMAIN \
         -d kubeconfig.$FIRST_DOMAIN \
         -d neuvector.$FIRST_DOMAIN \
@@ -196,6 +230,7 @@ write_files:
       echo "[$(date)] SUCCESS: Let's Encrypt certificate installed"
       echo "[$(date)] Certificate path: /etc/letsencrypt/live/$FIRST_DOMAIN/"
       echo "[$(date)] Access URL: https://console.$FIRST_DOMAIN"
+      echo "[$(date)] Installer URL: https://installer.$FIRST_DOMAIN (nginx Basic Auth)"
 
 runcmd:
   # Wait for unattended-upgrades to complete
@@ -228,6 +263,11 @@ runcmd:
   - sed -i "s|__SSL_KEY_PATH__|/etc/ssl/private/selfsigned.key|g" /etc/nginx/sites-available/deckhouse-proxy
   - ln -sf /etc/nginx/sites-available/deckhouse-proxy /etc/nginx/sites-enabled/
   - rm -f /etc/nginx/sites-enabled/default
+  - |
+      HASH=$(echo '${base64encode(installer_nginx_password)}' | base64 -d | openssl passwd -6 -stdin)
+      printf 'installer:%s\n' "$HASH" > /etc/nginx/.installer-htpasswd
+      chmod 640 /etc/nginx/.installer-htpasswd
+      chown root:www-data /etc/nginx/.installer-htpasswd
   - nginx -t && systemctl enable nginx && systemctl restart nginx
   # Obtain Let's Encrypt certificate
   - /usr/local/bin/setup-ssl-cert.sh
