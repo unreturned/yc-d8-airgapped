@@ -140,8 +140,8 @@ runcmd:
     echo "${harbor_admin_password}" | docker login ${registry_fqdn} -u admin --password-stdin
     echo "Docker login configured successfully"
   # Install deckhouse-cli
-  - sh -c "$(curl -fsSL https://raw.githubusercontent.com/deckhouse/deckhouse-cli/main/tools/install.sh)"
-  - d8 completion bash > /etc/bash_completion.d/d8
+  - sh -c "$(curl -fsSL https://raw.githubusercontent.com/deckhouse/deckhouse-cli/main/tools/install.sh)" "" --install-dir /usr/local/bin
+  - /usr/local/bin/d8 completion bash > /etc/bash_completion.d/d8
   # Install crane (container registry tool)
   - |
     VERSION=$(curl -s "https://api.github.com/repos/google/go-containerregistry/releases/latest" | jq -r '.tag_name')
